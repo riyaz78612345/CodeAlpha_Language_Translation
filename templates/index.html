@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CodeAlpha | Language Translator</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 40px 20px;
+      font-family: Arial, sans-serif;
+      background: #eef2ff;
+      color: #17213b;
+    }
+
+    main {
+      max-width: 950px;
+      margin: auto;
+      padding: 32px;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 12px 40px #17213b15;
+    }
+
+    .badge {
+      color: #4f46e5;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    h1 { margin-bottom: 10px; }
+    .description { color: #64748b; line-height: 1.6; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 28px;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    select, textarea {
+      width: 100%;
+      padding: 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      font: inherit;
+    }
+
+    select { margin-bottom: 16px; }
+
+    textarea {
+      height: 220px;
+      resize: vertical;
+      line-height: 1.6;
+    }
+
+    textarea:focus, select:focus {
+      outline: 2px solid #818cf8;
+      outline-offset: 2px;
+    }
+
+    #output { background: #f8fafc; }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    button {
+      padding: 12px 22px;
+      border: 0;
+      border-radius: 10px;
+      background: #4f46e5;
+      color: white;
+      font: inherit;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: #e0e7ff;
+      color: #3730a3;
+    }
+
+    button:disabled { opacity: .55; cursor: wait; }
+
+    #status { min-height: 24px; line-height: 1.5; }
+    .note { color: #64748b; font-size: 13px; line-height: 1.6; }
+    #counter { color: #64748b; font-size: 13px; }
+
+    @media (max-width: 650px) {
+      .grid { grid-template-columns: 1fr; }
+      main { padding: 22px; }
+      body { padding: 20px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="badge">CODEALPHA · AI INTERNSHIP · TASK 1</p>
+    <h1>Language Translator</h1>
+    <p class="description">
+      Choose your languages, enter a short sentence, and translate it.
+    </p>
+
+    <form id="translation-form">
+      <div class="grid">
+        <section>
+          <label for="source">Translate from</label>
+          <select id="source">
+            {% for code, name in languages.items() %}
+            <option value="{{ code }}" {% if code == "en" %}selected{% endif %}>
+              {{ name }}
+            </option>
+            {% endfor %}
+          </select>
+
+          <label for="input">Your text</label>
+          <textarea id="input" dir="auto"
+            placeholder="Example: Hello, how are you?" required></textarea>
+          <p id="counter">0 / 500 bytes</p>
+        </section>
+
+        <section>
+          <label for="target">Translate to</label>
+          <select id="target">
+            {% for code, name in languages.items() %}
+            <option value="{{ code }}" {% if code == "ta" %}selected{% endif %}>
+              {{ name }}
+            </option>
+            {% endfor %}
+          </select>
+
+          <label for="output">Translation</label>
+          <textarea id="output" dir="auto" readonly
+            placeholder="Your translation will appear here"></textarea>
+        </section>
+      </div>
+
+      <div class="actions">
+        <button id="translate" type="submit">Translate</button>
+        <button id="swap" class="secondary" type="button">Swap languages</button>
+        <button id="copy" class="secondary" type="button">Copy result</button>
+        <button id="clear" class="secondary" type="button">Clear</button>
+      </div>
+    </form>
+
+    <p id="status" role="status" aria-live="polite"></p>
+    <p class="note">
+      Powered by MyMemory. Internet access is required.
+      Text is sent to the translation service. Maximum 500 UTF-8 bytes
+      per request. Translation quality and service availability may vary.
+    </p>
+  </main>
+
+  <script>
+    const input = document.getElementById("input");
+    const output = document.getElementById("output");
+    const source = document.getElementById("source");
+    const target = document.getElementById("target");
+    const status = document.getElementById("status");
+    const counter = document.getElementById("counter");
+    const buttons = document.querySelectorAll("button");
+    const encoder = new TextEncoder();
+
+    function updateCounter() {
+      const bytes = encoder.encode(input.value.trim()).length;
+      counter.textContent = `${bytes} / 500 bytes`;
+      counter.style.color = bytes > 500 ? "#b91c1c" : "#64748b";
+    }
+
+    input.addEventListener("input", () => {
+      updateCounter();
+      output.value = "";
+      status.textContent = "";
+    });
+
+    [source, target].forEach(select => {
+      select.addEventListener("change", () => {
+        output.value = "";
+        status.textContent = "";
+      });
+    });
+
+    document.getElementById("translation-form").addEventListener(
+      "submit", async event => {
+        event.preventDefault();
+        const text = input.value.trim();
+
+        if (!text) {
+          status.textContent = "Please enter text to translate.";
+          return;
+        }
+
+        if (encoder.encode(text).length > 500) {
+          status.textContent = "Please shorten your text to 500 bytes or fewer.";
+          return;
+        }
+
+        output.value = "";
+        status.textContent = "Translating...";
+        buttons.forEach(button => button.disabled = true);
+        input.disabled = source.disabled = target.disabled = true;
+
+        try {
+          const response = await fetch("/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text,
+              source: source.value,
+              target: target.value
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || "Translation failed.");
+          }
+
+          output.value = data.translation;
+          status.textContent = "Translation complete.";
+        } catch (error) {
+          status.textContent = error.message || "Please try again.";
+        } finally {
+          buttons.forEach(button => button.disabled = false);
+          input.disabled = source.disabled = target.disabled = false;
+        }
+      }
+    );
+
+    document.getElementById("swap").addEventListener("click", () => {
+      const previousSource = source.value;
+      source.value = target.value;
+      target.value = previousSource;
+
+      if (output.value) {
+        input.value = output.value;
+      }
+
+      output.value = "";
+      status.textContent = "Languages swapped.";
+      updateCounter();
+    });
+
+    document.getElementById("copy").addEventListener("click", async () => {
+      if (!output.value) {
+        status.textContent = "Translate something first.";
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(output.value);
+        status.textContent = "Translation copied.";
+      } catch {
+        status.textContent = "Select the translation and press Ctrl+C to copy.";
+      }
+    });
+
+    document.getElementById("clear").addEventListener("click", () => {
+      input.value = "";
+      output.value = "";
+      status.textContent = "";
+      updateCounter();
+      input.focus();
+    });
+  </script>
+</body>
+</html>
